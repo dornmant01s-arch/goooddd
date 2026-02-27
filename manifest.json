@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Comment Tone Rewriter",
+  "version": "1.0.0",
+  "description": "Scans visible comments, detects toxic/negative tone, and rewrites them to neutral/positive text.",
+  "permissions": ["storage", "scripting", "activeTab"],
+  "host_permissions": [
+    "https://generativelanguage.googleapis.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Run Comment Tone Rewriter"
+  }
+}
