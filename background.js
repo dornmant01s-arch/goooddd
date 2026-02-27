@@ -3,6 +3,7 @@ const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models
 
 chrome.runtime.onInstalled.addListener(() => {
   console.log("Comment Tone Rewriter installed.");
+ codex/create-chrome-extension-to-rewrite-toxic-comments-35zxwg
   console.log("Click the extension icon on a page to run comment scanning.");
   console.log("Set your Gemini API key with: chrome.storage.local.set({ GEMINI_API_KEY: 'YOUR_KEY' })");
 });
@@ -27,6 +28,11 @@ chrome.action.onClicked.addListener(async (tab) => {
   }
 });
 
+=======
+  console.log("Set your Gemini API key with: chrome.storage.local.set({ GEMINI_API_KEY: 'YOUR_KEY' })");
+});
+
+ main
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type !== "ANALYZE_AND_REWRITE") {
     return false;
@@ -42,10 +48,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   return true;
 });
 
+codex/create-chrome-extension-to-rewrite-toxic-comments-35zxwg
 function isSupportedUrl(url = "") {
   return /^https?:\/\//i.test(url);
 }
 
+=======
+ main
 async function analyzeAndRewrite(text) {
   const { GEMINI_API_KEY } = await chrome.storage.local.get(["GEMINI_API_KEY"]);
   if (!GEMINI_API_KEY) {
