@@ -3,14 +3,24 @@
   "name": "Comment Tone Rewriter",
   "version": "1.0.0",
   "description": "Scans visible comments, detects toxic/negative tone, and rewrites them to neutral/positive text.",
+codex/create-chrome-extension-to-rewrite-toxic-comments-35zxwg
+  "permissions": ["storage", "scripting", "activeTab"],
+  "host_permissions": [
+=======
   "permissions": ["storage"],
   "host_permissions": [
     "<all_urls>",
+ main
     "https://generativelanguage.googleapis.com/*"
   ],
   "background": {
     "service_worker": "background.js"
   },
+ codex/create-chrome-extension-to-rewrite-toxic-comments-35zxwg
+  "action": {
+    "default_title": "Run Comment Tone Rewriter"
+  }
+=======
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
@@ -18,4 +28,5 @@
       "run_at": "document_idle"
     }
   ]
+ main
 }
