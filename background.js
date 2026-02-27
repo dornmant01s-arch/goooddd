@@ -1,4 +1,4 @@
-const GEMINI_MODEL = "gemini-1.5-flash";
+const GEMINI_MODEL = "gemini-pro";
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -22,71 +22,97 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 });
 
 async function analyzeAndRewrite(text) {
-  if (!text || typeof text !== "string") {
-    return { shouldRewrite: false, rewrittenText: null, reason: "Invalid text" };
-  }
-
   const { GEMINI_API_KEY } = await chrome.storage.local.get(["GEMINI_API_KEY"]);
   if (!GEMINI_API_KEY) {
     throw new Error("Missing GEMINI_API_KEY in chrome.storage.local");
   }
 
+  const result = await callGeminiToxicRewrite(text, GEMINI_API_KEY);
+
+  return {
+    isToxic: result.isToxic,
+    shouldRewrite: result.isToxic,
+    rewrittenText: result.rewrittenText
+  };
+}
+
+async function callGeminiToxicRewrite(text, apiKey) {
+  if (typeof text !== "string" || !text.trim()) {
+    throw new Error("Input text must be a non-empty string.");
+  }
+
+  if (typeof apiKey !== "string" || !apiKey.trim()) {
+    throw new Error("A valid Gemini API key is required.");
+  }
+
   const prompt = [
-    "You are a moderation assistant.",
-    "Decide if the comment is negative or toxic.",
-    "If it is negative or toxic, rewrite it to be neutral/positive while preserving core meaning.",
-    "Return strict JSON only with keys:",
-    '{"sentiment":"negative|neutral|positive","toxicity":"toxic|not_toxic","shouldRewrite":boolean,"rewrittenText":string}',
-    "If shouldRewrite is false, rewrittenText must equal the original text.",
-    "Comment:",
+    "You are a content moderation assistant.",
+    "Task:",
+    "1) Detect if the input text is toxic or highly negative.",
+    "2) If toxic, rewrite it in a neutral tone.",
+    "3) Respond with JSON only using exactly this schema:",
+    '{"isToxic": true/false, "rewrittenText": "string"}',
+    "Rules:",
+    "- If isToxic is false, rewrittenText must equal the original input text.",
+    "- Do not include markdown, comments, or extra keys.",
+    "Input text:",
     text
   ].join("\n");
 
-  const endpoint = `${GEMINI_API_BASE}/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`;
+  const url = `${GEMINI_API_BASE}/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.2,
-        responseMimeType: "application/json"
-      }
-    })
-  });
-
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Gemini API error ${response.status}: ${body}`);
+  let response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.2,
+          responseMimeType: "application/json"
+        }
+      })
+    });
+  } catch (error) {
+    throw new Error(`Network error while calling Gemini API: ${error.message}`);
   }
 
-  const data = await response.json();
-  const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!rawText) {
-    throw new Error("Gemini response did not include text output");
+  if (!response.ok) {
+    const details = await response.text().catch(() => "Unable to read error body");
+    throw new Error(`Gemini API request failed (${response.status}): ${details}`);
+  }
+
+  let payload;
+  try {
+    payload = await response.json();
+  } catch (error) {
+    throw new Error(`Failed to parse Gemini API response JSON: ${error.message}`);
+  }
+
+  const candidateText = payload?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!candidateText) {
+    throw new Error("Gemini API response did not include model output text.");
   }
 
   let parsed;
   try {
-    parsed = JSON.parse(rawText);
+    parsed = JSON.parse(candidateText);
   } catch {
-    const extracted = rawText.match(/\{[\s\S]*\}/);
-    if (!extracted) {
-      throw new Error("Failed to parse Gemini JSON output");
+    const jsonMatch = candidateText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error("Gemini output was not valid JSON.");
     }
-    parsed = JSON.parse(extracted[0]);
+    parsed = JSON.parse(jsonMatch[0]);
   }
 
-  const shouldRewrite = Boolean(parsed.shouldRewrite);
-  const rewrittenText = typeof parsed.rewrittenText === "string" ? parsed.rewrittenText.trim() : text;
+  const isToxic = Boolean(parsed?.isToxic);
+  const rewrittenText = typeof parsed?.rewrittenText === "string" && parsed.rewrittenText.trim()
+    ? parsed.rewrittenText.trim()
+    : text;
 
   return {
-    sentiment: parsed.sentiment || "unknown",
-    toxicity: parsed.toxicity || "unknown",
-    shouldRewrite,
-    rewrittenText: shouldRewrite ? rewrittenText : text
+    isToxic,
+    rewrittenText: isToxic ? rewrittenText : text
   };
 }

@@ -36,3 +36,6 @@ This extension scans visible comments on web pages, detects toxic/negative senti
 - The API key is kept out of content scripts and only used in `background.js`.
 - Chrome extensions cannot fully hide secrets from a determined local user; for production security, proxy Gemini requests through your own backend.
 - Comment detection is heuristic because websites use many DOM patterns.
+
+
+Uses Gemini model: `gemini-pro` via `v1beta/models/gemini-pro:generateContent`.
