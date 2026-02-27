@@ -1,5 +1,12 @@
-const GEMINI_MODEL = "gemini-2.5-flash";
-const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
+const DEFAULT_MODEL = "gemini-2.5-flash";
+const API_BASE = "https://generativelanguage.googleapis.com";
+const API_VERSIONS = ["v1beta", "v1"];
+const MODEL_CANDIDATES = [
+  DEFAULT_MODEL,
+  "gemini-2.5-flash-latest",
+  "gemini-1.5-flash-latest",
+  "gemini-1.5-flash"
+];
 const CACHE_LIMIT = 100;
 const rewriteCache = new Map();
 
@@ -30,12 +37,14 @@ async function rewriteSelection(text) {
     return cached;
   }
 
-  const { GEMINI_API_KEY } = await chrome.storage.local.get(["GEMINI_API_KEY"]);
+  const { GEMINI_API_KEY, GEMINI_MODEL } = await chrome.storage.local.get(["GEMINI_API_KEY", "GEMINI_MODEL"]);
   if (!GEMINI_API_KEY) {
     throw new Error("Missing GEMINI_API_KEY in chrome.storage.local");
   }
 
-  const rewrittenText = await callGeminiRewrite(normalized, GEMINI_API_KEY);
+  const preferredModel = normalizeText(GEMINI_MODEL) || DEFAULT_MODEL;
+  const rewrittenText = await callGeminiRewriteWithFallback(normalized, GEMINI_API_KEY, preferredModel);
+
   const result = { rewrittenText };
   rewriteCache.set(normalized, result);
 
@@ -47,7 +56,32 @@ async function rewriteSelection(text) {
   return result;
 }
 
-async function callGeminiRewrite(text, apiKey) {
+async function callGeminiRewriteWithFallback(text, apiKey, preferredModel) {
+  const candidates = [preferredModel, ...MODEL_CANDIDATES.filter((m) => m !== preferredModel)];
+  let lastError = null;
+
+  for (const version of API_VERSIONS) {
+    for (const model of candidates) {
+      try {
+        return await callGeminiRewrite(text, apiKey, { model, version });
+      } catch (error) {
+        lastError = error;
+        if (!isRetryableModelError(error)) {
+          throw error;
+        }
+      }
+    }
+  }
+
+  throw lastError || new Error("No supported Gemini model endpoint available.");
+}
+
+function isRetryableModelError(error) {
+  const message = String(error?.message || "");
+  return /request failed \(404\)/i.test(message) || /NOT_FOUND/i.test(message) || /models\//i.test(message);
+}
+
+async function callGeminiRewrite(text, apiKey, target) {
   const prompt = [
     "You are a text tone rewriting assistant.",
     "Rewrite the input text into a calm, neutral, or positive tone.",
@@ -59,7 +93,7 @@ async function callGeminiRewrite(text, apiKey) {
     `"${text}"`
   ].join("\n");
 
-  const url = `${GEMINI_API_BASE}/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const url = `${API_BASE}/${target.version}/models/${target.model}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
   let response;
   try {

@@ -1,4 +1,7 @@
 (() => {
+  if (window.__TONE_REWRITE_INLINE_LOADED__) return;
+  window.__TONE_REWRITE_INLINE_LOADED__ = true;
+
   const MAX_SELECTION_LENGTH = 1200;
   const BUTTON_ID = "tone-rewrite-inline-button";
   const TOAST_ID = "tone-rewrite-inline-toast";
@@ -14,11 +17,15 @@
 
   document.addEventListener("selectionchange", handleSelectionChange, true);
   document.addEventListener("mouseup", handleSelectionChange, true);
-  window.addEventListener("scroll", () => {
-    if (isButtonVisible()) {
-      positionButton();
-    }
-  }, true);
+  window.addEventListener(
+    "scroll",
+    () => {
+      if (isButtonVisible()) {
+        positionButton();
+      }
+    },
+    true
+  );
 
   function handleSelectionChange() {
     if (pending) return;
@@ -166,9 +173,7 @@
     range.insertNode(node);
 
     const selection = window.getSelection();
-    if (selection) {
-      selection.removeAllRanges();
-    }
+    if (selection) selection.removeAllRanges();
 
     selectedRange = null;
     selectedText = "";
@@ -216,8 +221,8 @@
   function showToast(message) {
     toast.textContent = message;
     toast.style.display = "block";
-    clearTimeout(showToast.timer);
-    showToast.timer = setTimeout(() => {
+    clearTimeout(showToast.timerId);
+    showToast.timerId = setTimeout(() => {
       toast.style.display = "none";
     }, 2800);
   }

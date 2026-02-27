@@ -38,7 +38,7 @@ This extension scans visible comments on web pages, detects toxic/negative senti
 - Comment detection is heuristic because websites use many DOM patterns.
 
 
-Uses Gemini model: `gemini-1.5-flash` via `v1beta/models/gemini-1.5-flash:generateContent`.
+Uses Gemini model: `gemini-2.5-flash` via `v1beta/models/gemini-2.5-flash:generateContent`.
 
 ## Troubleshooting
 
