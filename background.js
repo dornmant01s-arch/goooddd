@@ -1,30 +1,10 @@
-const GEMINI_MODEL = "gemini-pro";
+const GEMINI_MODEL = "gemini-1.5-flash";
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
 chrome.runtime.onInstalled.addListener(() => {
   console.log("Comment Tone Rewriter installed.");
-  console.log("Click the extension icon on a page to run comment scanning.");
+  console.log("content.js runs automatically on matched pages.");
   console.log("Set your Gemini API key with: chrome.storage.local.set({ GEMINI_API_KEY: 'YOUR_KEY' })");
-});
-
-chrome.action.onClicked.addListener(async (tab) => {
-  if (!tab?.id) {
-    return;
-  }
-
-  if (!isSupportedUrl(tab.url)) {
-    console.warn("Comment Tone Rewriter cannot run on this page:", tab.url);
-    return;
-  }
-
-  try {
-    await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      files: ["content.js"]
-    });
-  } catch (error) {
-    console.error("Failed to inject content script", error);
-  }
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -41,10 +21,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   return true;
 });
-
-function isSupportedUrl(url = "") {
-  return /^https?:\/\//i.test(url);
-}
 
 async function analyzeAndRewrite(text) {
   const { GEMINI_API_KEY } = await chrome.storage.local.get(["GEMINI_API_KEY"]);
