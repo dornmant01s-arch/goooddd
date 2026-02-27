@@ -4,11 +4,8 @@ This extension scans visible comments on web pages, detects toxic/negative senti
 
 ## Files
 
-codex/create-chrome-extension-to-rewrite-toxic-comments-35zxwg
 - `manifest.json` — Manifest V3 config, action button, and background service worker wiring for click-to-run behavior.
-=======
-- `manifest.json` — Manifest V3 config, content script + background service worker wiring.
- main
+
 - `content.js` — Scans visible comment-like DOM nodes, observes dynamic updates with `MutationObserver`, sends text for analysis/rewrite, and updates DOM with toggle button.
 - `background.js` — Handles Gemini API calls via `fetch` from the service worker so the content script does not directly access the API key.
 
@@ -31,13 +28,8 @@ codex/create-chrome-extension-to-rewrite-toxic-comments-35zxwg
    ```
 
 4. **Browse any site with comments**
-codex/create-chrome-extension-to-rewrite-toxic-comments-35zxwg
    - Click the extension icon to inject `content.js` into the current active tab.
    - The script scans visible comment-like text and rewrites toxic/negative comments.
-=======
-   - The content script auto-scans visible comment-like text.
-   - Negative/toxic comments are rewritten.
- main
    - Click **Show original** to toggle between rewritten and original text.
 
 ## Notes
@@ -48,3 +40,15 @@ codex/create-chrome-extension-to-rewrite-toxic-comments-35zxwg
 
 
 Uses Gemini model: `gemini-pro` via `v1beta/models/gemini-pro:generateContent`.
+
+## Troubleshooting
+
+- If Chrome shows `Manifest is not valid JSON`:
+  - Make sure `manifest.json` has no merge markers like `<<<<<<<`, `=======`, `>>>>>>>`.
+  - Save the file as UTF-8 and reload the extension in `chrome://extensions`.
+  - Validate quickly with:
+
+  ```bash
+  node -e "JSON.parse(require('fs').readFileSync('manifest.json','utf8')); console.log('manifest ok')"
+  ```
+
