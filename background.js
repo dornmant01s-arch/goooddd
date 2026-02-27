@@ -83,14 +83,29 @@ function isRetryableModelError(error) {
 
 async function callGeminiRewrite(text, apiKey, target) {
   const prompt = [
-    "You are a text tone rewriting assistant.",
-    "Rewrite the input text into a calm, neutral, or positive tone.",
-    "Keep the original meaning.",
-    "Return JSON only with exactly this schema:",
-    '{"rewrittenText": "string"}',
+    "You are a Korean tone-rewrite assistant.",
+    "Perform this in ONE call with two internal steps:",
+    "Step 1 (silent): identify tone issues (sarcasm, irony, passive-aggressive phrasing, backhanded compliments, insinuations), profanity, insults, and slang; then choose rewrite strategy.",
+    "Step 2 (output): produce only the final rewritten sentence/text.",
     "",
-    "Input:",
-    `"${text}"`
+    "Rewrite goals:",
+    "- Neutralize sarcasm, irony, passive-aggressive nuance, backhanded compliments, and insinuations.",
+    "- Remove profanity, insults, and slang.",
+    "- Preserve original meaning and intent.",
+    "- Rewrite in natural Korean conversational tone: polite, warm, refined, and sophisticated.",
+    "- Avoid formal bureaucratic/corporate style (e.g., do not use expressions like '~하시기 바랍니다').",
+    "- Avoid overly casual slang tone.",
+    "- Keep output length close to original (about ±20%).",
+    "- Preserve punctuation and emojis when appropriate.",
+    "- Do not add new information.",
+    "- Do not moralize, lecture, or explain.",
+    "",
+    "Output rules:",
+    "- Return ONLY rewritten text.",
+    "- No quotes, no markdown, no code fences, no extra commentary.",
+    "",
+    "Input text:",
+    text
   ].join("\n");
 
   const url = `${API_BASE}/${target.version}/models/${target.model}:generateContent?key=${encodeURIComponent(apiKey)}`;
@@ -103,8 +118,9 @@ async function callGeminiRewrite(text, apiKey, target) {
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: {
-          temperature: 0.2,
-          responseMimeType: "application/json"
+          temperature: 0.5,
+          topP: 0.92,
+          responseMimeType: "text/plain"
         }
       })
     });
@@ -129,23 +145,22 @@ async function callGeminiRewrite(text, apiKey, target) {
     throw new Error("Gemini API response did not include model output text.");
   }
 
-  let parsed;
-  try {
-    parsed = JSON.parse(candidateText);
-  } catch {
-    const jsonMatch = candidateText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error("Gemini output was not valid JSON.");
-    }
-    parsed = JSON.parse(jsonMatch[0]);
-  }
-
-  const rewrittenText = normalizeText(parsed?.rewrittenText);
+  const rewrittenText = normalizeModelOutput(candidateText);
   if (!rewrittenText) {
-    throw new Error("Gemini did not return rewrittenText.");
+    throw new Error("Gemini did not return rewritten text.");
   }
 
   return rewrittenText;
+}
+
+function normalizeModelOutput(value) {
+  if (typeof value !== "string") return "";
+  return value
+    .replace(/^```[\s\S]*?\n/, "")
+    .replace(/```$/g, "")
+    .replace(/^(["'“”‘’])|(["'“”‘’])$/g, "")
+    .replace(/\r/g, "")
+    .trim();
 }
 
 function normalizeText(value) {
