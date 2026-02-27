@@ -4,7 +4,7 @@ This extension scans visible comments on web pages, detects toxic/negative senti
 
 ## Files
 
-- `manifest.json` — Manifest V3 config, content script + background service worker wiring.
+- `manifest.json` — Manifest V3 config, action button, and background service worker wiring for click-to-run behavior.
 - `content.js` — Scans visible comment-like DOM nodes, observes dynamic updates with `MutationObserver`, sends text for analysis/rewrite, and updates DOM with toggle button.
 - `background.js` — Handles Gemini API calls via `fetch` from the service worker so the content script does not directly access the API key.
 
@@ -27,8 +27,8 @@ This extension scans visible comments on web pages, detects toxic/negative senti
    ```
 
 4. **Browse any site with comments**
-   - The content script auto-scans visible comment-like text.
-   - Negative/toxic comments are rewritten.
+   - Click the extension icon to inject `content.js` into the current active tab.
+   - The script scans visible comment-like text and rewrites toxic/negative comments.
    - Click **Show original** to toggle between rewritten and original text.
 
 ## Notes

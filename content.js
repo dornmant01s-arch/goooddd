@@ -13,7 +13,12 @@ const MAX_TEXT_LENGTH = 900;
 const PROCESSED_TEXT = new WeakMap();
 const ORIGINAL_TEXT = new WeakMap();
 
-init();
+if (window.__COMMENT_TONE_REWRITER_RUNNING__) {
+  console.debug("Comment Tone Rewriter is already running on this tab.");
+} else {
+  window.__COMMENT_TONE_REWRITER_RUNNING__ = true;
+  init();
+}
 
 function init() {
   scanDocument(document);
