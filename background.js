@@ -46,17 +46,20 @@ async function callGeminiToxicRewrite(text, apiKey) {
   }
 
   const prompt = [
-    "You are a content moderation assistant.",
-    "Task:",
-    "1) Detect if the input text is toxic or highly negative.",
-    "2) If toxic, rewrite it in a neutral tone.",
-    "3) Respond with JSON only using exactly this schema:",
+    "You are a toxicity detection and rewriting assistant.",
+    "",
+    "Analyze the following text.",
+    "",
+    "1) Determine if it is toxic, hateful, or highly negative.",
+    "2) If it is toxic, rewrite it in a calm, neutral tone.",
+    "3) If it is not toxic, keep it unchanged.",
+    "4) Return JSON only.",
+    "",
+    "Return this exact schema:",
     '{"isToxic": true/false, "rewrittenText": "string"}',
-    "Rules:",
-    "- If isToxic is false, rewrittenText must equal the original input text.",
-    "- Do not include markdown, comments, or extra keys.",
-    "Input text:",
-    text
+    "",
+    "Text:",
+    `"${text}"`
   ].join("\n");
 
   const url = `${GEMINI_API_BASE}/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
