@@ -1,168 +1,228 @@
-const COMMENT_SELECTORS = [
-  '[data-testid*="comment" i]',
-  '[class*="comment" i]',
-  '[id*="comment" i]',
-  'article',
-  '[role="article"]',
-  'li',
-  'p'
-];
+(() => {
+  const MAX_SELECTION_LENGTH = 1200;
+  const BUTTON_ID = "tone-rewrite-inline-button";
+  const TOAST_ID = "tone-rewrite-inline-toast";
+  const PENDING_LABEL = "rewriting...";
+  const READY_LABEL = "✨ Rewrite";
 
-const MIN_TEXT_LENGTH = 20;
-const MAX_TEXT_LENGTH = 900;
-const PROCESSED_TEXT = new WeakMap();
-const ORIGINAL_TEXT = new WeakMap();
+  let selectedText = "";
+  let selectedRange = null;
+  let pending = false;
 
-if (window.__COMMENT_TONE_REWRITER_RUNNING__) {
-  console.debug("Comment Tone Rewriter is already running on this tab.");
-} else {
-  window.__COMMENT_TONE_REWRITER_RUNNING__ = true;
-  init();
-}
+  const button = createButton();
+  const toast = createToast();
 
-function init() {
-  scanDocument(document);
-  observeMutations();
-}
-
-function observeMutations() {
-  const observer = new MutationObserver((mutations) => {
-    for (const mutation of mutations) {
-      if (mutation.type === "childList") {
-        mutation.addedNodes.forEach((node) => {
-          if (node.nodeType === Node.ELEMENT_NODE) {
-            scanDocument(node);
-          }
-        });
-      }
-
-      if (mutation.type === "characterData") {
-        const parent = mutation.target?.parentElement;
-        if (parent) scanElement(parent);
-      }
+  document.addEventListener("selectionchange", handleSelectionChange, true);
+  document.addEventListener("mouseup", handleSelectionChange, true);
+  window.addEventListener("scroll", () => {
+    if (isButtonVisible()) {
+      positionButton();
     }
-  });
+  }, true);
 
-  observer.observe(document.body, {
-    childList: true,
-    subtree: true,
-    characterData: true
-  });
-}
+  function handleSelectionChange() {
+    if (pending) return;
 
-function scanDocument(root) {
-  if (!root?.querySelectorAll) return;
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+      hideButton();
+      return;
+    }
 
-  const selector = COMMENT_SELECTORS.join(",");
-  const candidates = root.querySelectorAll(selector);
-  candidates.forEach((element) => scanElement(element));
-}
+    const range = selection.getRangeAt(0);
+    const text = normalize(selection.toString());
+    if (!text) {
+      hideButton();
+      return;
+    }
 
-function scanElement(element) {
-  if (!isVisible(element)) return;
+    if (isForbiddenTarget(range)) {
+      hideButton();
+      return;
+    }
 
-  const textNode = findPrimaryTextNode(element);
-  if (!textNode) return;
+    selectedText = text;
+    selectedRange = range.cloneRange();
+    showButton();
+    positionButton();
+  }
 
-  const text = normalizeWhitespace(textNode.textContent || "");
-  if (!isLikelyComment(text)) return;
-
-  const previous = PROCESSED_TEXT.get(textNode);
-  if (previous === text) return;
-
-  PROCESSED_TEXT.set(textNode, text);
-  maybeRewriteComment(textNode, text);
-}
-
-function isVisible(element) {
-  if (!(element instanceof Element)) return false;
-  const style = window.getComputedStyle(element);
-  if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") {
+  function isForbiddenTarget(range) {
+    const element = getClosestElement(range.commonAncestorContainer);
+    if (!element) return false;
+    if (element.closest("input, textarea")) return true;
+    if (element.isContentEditable) return true;
+    if (element.closest('[contenteditable=""], [contenteditable="true"]')) return true;
     return false;
   }
-  const rect = element.getBoundingClientRect();
-  return rect.width > 0 && rect.height > 0;
-}
 
-function isLikelyComment(text) {
-  if (!text) return false;
-  if (text.length < MIN_TEXT_LENGTH || text.length > MAX_TEXT_LENGTH) return false;
-  const wordCount = text.split(/\s+/).filter(Boolean).length;
-  return wordCount >= 4;
-}
+  function getClosestElement(node) {
+    if (!node) return null;
+    if (node.nodeType === Node.ELEMENT_NODE) return node;
+    return node.parentElement || null;
+  }
 
-function findPrimaryTextNode(element) {
-  const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, {
-    acceptNode(node) {
-      const value = normalizeWhitespace(node.textContent || "");
-      if (!value || value.length < MIN_TEXT_LENGTH) return NodeFilter.FILTER_REJECT;
-      if (!node.parentElement || !isVisible(node.parentElement)) return NodeFilter.FILTER_REJECT;
-      return NodeFilter.FILTER_ACCEPT;
+  function createButton() {
+    let el = document.getElementById(BUTTON_ID);
+    if (el) return el;
+
+    el = document.createElement("button");
+    el.id = BUTTON_ID;
+    el.type = "button";
+    el.textContent = READY_LABEL;
+    el.style.position = "fixed";
+    el.style.zIndex = "2147483647";
+    el.style.display = "none";
+    el.style.padding = "6px 8px";
+    el.style.fontSize = "12px";
+    el.style.lineHeight = "1";
+    el.style.border = "1px solid #d0d7de";
+    el.style.borderRadius = "8px";
+    el.style.background = "#111827";
+    el.style.color = "#ffffff";
+    el.style.cursor = "pointer";
+    el.style.boxShadow = "0 2px 8px rgba(0,0,0,0.25)";
+
+    el.addEventListener("mousedown", (event) => event.preventDefault());
+    el.addEventListener("click", onRewriteClick);
+
+    document.documentElement.appendChild(el);
+    return el;
+  }
+
+  function createToast() {
+    let el = document.getElementById(TOAST_ID);
+    if (el) return el;
+
+    el = document.createElement("div");
+    el.id = TOAST_ID;
+    el.style.position = "fixed";
+    el.style.bottom = "20px";
+    el.style.right = "20px";
+    el.style.zIndex = "2147483647";
+    el.style.display = "none";
+    el.style.maxWidth = "320px";
+    el.style.padding = "10px 12px";
+    el.style.fontSize = "12px";
+    el.style.borderRadius = "8px";
+    el.style.background = "rgba(17, 24, 39, 0.95)";
+    el.style.color = "#fff";
+    el.style.boxShadow = "0 6px 20px rgba(0,0,0,0.25)";
+
+    document.documentElement.appendChild(el);
+    return el;
+  }
+
+  async function onRewriteClick() {
+    if (pending) return;
+
+    if (!selectedRange || !selectedText) {
+      showToast("Please select text first.");
+      hideButton();
+      return;
     }
-  });
 
-  let bestNode = null;
-  let bestLength = 0;
-  while (walker.nextNode()) {
-    const current = walker.currentNode;
-    const length = normalizeWhitespace(current.textContent || "").length;
-    if (length > bestLength) {
-      bestLength = length;
-      bestNode = current;
+    if (selectedText.length > MAX_SELECTION_LENGTH) {
+      showToast(`Selection is too long (${selectedText.length}/${MAX_SELECTION_LENGTH}).`);
+      return;
+    }
+
+    if (isForbiddenTarget(selectedRange)) {
+      showToast("Rewriting in input/textarea/contentEditable is not supported.");
+      hideButton();
+      return;
+    }
+
+    setPending(true);
+
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: "REWRITE_SELECTION",
+        text: selectedText
+      });
+
+      if (!response?.ok || !response?.result?.rewrittenText) {
+        throw new Error(response?.error || "Rewrite failed.");
+      }
+
+      replaceSelectedRange(response.result.rewrittenText);
+      hideButton();
+    } catch (error) {
+      showToast(error?.message || "Failed to rewrite selection.");
+    } finally {
+      setPending(false);
     }
   }
-  return bestNode;
-}
 
-async function maybeRewriteComment(textNode, originalText) {
-  try {
-    const response = await chrome.runtime.sendMessage({
-      type: "ANALYZE_AND_REWRITE",
-      text: originalText
-    });
+  function replaceSelectedRange(newText) {
+    if (!selectedRange) return;
 
-    if (!response?.ok || !response.result?.shouldRewrite) return;
+    const safeText = normalize(newText);
+    if (!safeText) return;
 
-    const rewrittenText = normalizeWhitespace(response.result.rewrittenText || "");
-    if (!rewrittenText || rewrittenText === originalText) return;
+    const range = selectedRange.cloneRange();
+    range.deleteContents();
+    const node = document.createTextNode(safeText);
+    range.insertNode(node);
 
-    ORIGINAL_TEXT.set(textNode, originalText);
-    textNode.textContent = rewrittenText;
-    attachToggleButton(textNode);
-  } catch (error) {
-    console.debug("Skipping comment rewrite", error);
+    const selection = window.getSelection();
+    if (selection) {
+      selection.removeAllRanges();
+    }
+
+    selectedRange = null;
+    selectedText = "";
   }
-}
 
-function attachToggleButton(textNode) {
-  const parent = textNode.parentElement;
-  if (!parent || parent.querySelector('[data-tone-toggle="true"]')) return;
+  function positionButton() {
+    if (!selectedRange) return;
 
-  const button = document.createElement("button");
-  button.type = "button";
-  button.dataset.toneToggle = "true";
-  button.textContent = "Show original";
-  button.style.marginLeft = "6px";
-  button.style.fontSize = "11px";
-  button.style.cursor = "pointer";
-  button.style.border = "1px solid #bbb";
-  button.style.background = "#fff";
-  button.style.borderRadius = "4px";
-  button.style.padding = "1px 6px";
+    const rect = selectedRange.getBoundingClientRect();
+    if (!rect || (rect.width === 0 && rect.height === 0)) {
+      hideButton();
+      return;
+    }
 
-  let showingOriginal = false;
-  const rewritten = textNode.textContent || "";
-  const original = ORIGINAL_TEXT.get(textNode) || rewritten;
+    const offset = 8;
+    const left = Math.min(window.innerWidth - 100, rect.right + offset);
+    const top = Math.min(window.innerHeight - 40, rect.bottom + offset);
 
-  button.addEventListener("click", () => {
-    showingOriginal = !showingOriginal;
-    textNode.textContent = showingOriginal ? original : rewritten;
-    button.textContent = showingOriginal ? "Show rewritten" : "Show original";
-  });
+    button.style.left = `${Math.max(8, left)}px`;
+    button.style.top = `${Math.max(8, top)}px`;
+  }
 
-  parent.appendChild(button);
-}
+  function showButton() {
+    button.style.display = "block";
+  }
 
-function normalizeWhitespace(value) {
-  return value.replace(/\s+/g, " ").trim();
-}
+  function hideButton() {
+    button.style.display = "none";
+    selectedRange = null;
+    selectedText = "";
+  }
+
+  function isButtonVisible() {
+    return button.style.display !== "none";
+  }
+
+  function setPending(value) {
+    pending = value;
+    button.disabled = value;
+    button.style.opacity = value ? "0.7" : "1";
+    button.style.cursor = value ? "default" : "pointer";
+    button.textContent = value ? PENDING_LABEL : READY_LABEL;
+  }
+
+  function showToast(message) {
+    toast.textContent = message;
+    toast.style.display = "block";
+    clearTimeout(showToast.timer);
+    showToast.timer = setTimeout(() => {
+      toast.style.display = "none";
+    }, 2800);
+  }
+
+  function normalize(value) {
+    return typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
+  }
+})();

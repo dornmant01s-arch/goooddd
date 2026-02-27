@@ -1,11 +1,10 @@
 {
   "manifest_version": 3,
   "name": "Comment Tone Rewriter",
-  "version": "1.0.1",
-  "description": "Scans visible comments, detects toxic/negative tone, and rewrites them to neutral/positive text.",
+  "version": "3.0.0",
+  "description": "Rewrite only selected text to a neutral/positive tone using Gemini.",
   "permissions": ["storage"],
   "host_permissions": [
-    "<all_urls>",
     "https://generativelanguage.googleapis.com/*"
   ],
   "background": {
@@ -13,7 +12,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": ["http://*/*", "https://*/*"],
       "js": ["content.js"],
       "run_at": "document_idle"
     }

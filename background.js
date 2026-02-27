@@ -1,65 +1,61 @@
-const GEMINI_MODEL = "gemini-1.5-flash";
+const GEMINI_MODEL = "gemini-2.5-flash";
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
-
-chrome.runtime.onInstalled.addListener(() => {
-  console.log("Comment Tone Rewriter installed.");
-  console.log("content.js runs automatically on matched pages.");
-  console.log("Set your Gemini API key with: chrome.storage.local.set({ GEMINI_API_KEY: 'YOUR_KEY' })");
-});
+const CACHE_LIMIT = 100;
+const rewriteCache = new Map();
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message?.type !== "ANALYZE_AND_REWRITE") {
+  if (message?.type !== "REWRITE_SELECTION") {
     return false;
   }
 
-  analyzeAndRewrite(message.text)
+  rewriteSelection(message.text)
     .then((result) => sendResponse({ ok: true, result }))
     .catch((error) => {
-      console.error("Gemini request failed", error);
       sendResponse({ ok: false, error: error.message || "Unknown error" });
     });
 
   return true;
 });
 
-async function analyzeAndRewrite(text) {
+async function rewriteSelection(text) {
+  const normalized = normalizeText(text);
+  if (!normalized) {
+    throw new Error("Please select some text.");
+  }
+
+  if (rewriteCache.has(normalized)) {
+    const cached = rewriteCache.get(normalized);
+    rewriteCache.delete(normalized);
+    rewriteCache.set(normalized, cached);
+    return cached;
+  }
+
   const { GEMINI_API_KEY } = await chrome.storage.local.get(["GEMINI_API_KEY"]);
   if (!GEMINI_API_KEY) {
     throw new Error("Missing GEMINI_API_KEY in chrome.storage.local");
   }
 
-  const result = await callGeminiToxicRewrite(text, GEMINI_API_KEY);
+  const rewrittenText = await callGeminiRewrite(normalized, GEMINI_API_KEY);
+  const result = { rewrittenText };
+  rewriteCache.set(normalized, result);
 
-  return {
-    isToxic: result.isToxic,
-    shouldRewrite: result.isToxic,
-    rewrittenText: result.rewrittenText
-  };
+  if (rewriteCache.size > CACHE_LIMIT) {
+    const oldestKey = rewriteCache.keys().next().value;
+    rewriteCache.delete(oldestKey);
+  }
+
+  return result;
 }
 
-async function callGeminiToxicRewrite(text, apiKey) {
-  if (typeof text !== "string" || !text.trim()) {
-    throw new Error("Input text must be a non-empty string.");
-  }
-
-  if (typeof apiKey !== "string" || !apiKey.trim()) {
-    throw new Error("A valid Gemini API key is required.");
-  }
-
+async function callGeminiRewrite(text, apiKey) {
   const prompt = [
-    "You are a toxicity detection and rewriting assistant.",
+    "You are a text tone rewriting assistant.",
+    "Rewrite the input text into a calm, neutral, or positive tone.",
+    "Keep the original meaning.",
+    "Return JSON only with exactly this schema:",
+    '{"rewrittenText": "string"}',
     "",
-    "Analyze the following text.",
-    "",
-    "1) Determine if it is toxic, hateful, or highly negative.",
-    "2) If it is toxic, rewrite it in a calm, neutral tone.",
-    "3) If it is not toxic, keep it unchanged.",
-    "4) Return JSON only.",
-    "",
-    "Return this exact schema:",
-    '{"isToxic": true/false, "rewrittenText": "string"}',
-    "",
-    "Text:",
+    "Input:",
     `"${text}"`
   ].join("\n");
 
@@ -110,13 +106,14 @@ async function callGeminiToxicRewrite(text, apiKey) {
     parsed = JSON.parse(jsonMatch[0]);
   }
 
-  const isToxic = Boolean(parsed?.isToxic);
-  const rewrittenText = typeof parsed?.rewrittenText === "string" && parsed.rewrittenText.trim()
-    ? parsed.rewrittenText.trim()
-    : text;
+  const rewrittenText = normalizeText(parsed?.rewrittenText);
+  if (!rewrittenText) {
+    throw new Error("Gemini did not return rewrittenText.");
+  }
 
-  return {
-    isToxic,
-    rewrittenText: isToxic ? rewrittenText : text
-  };
+  return rewrittenText;
+}
+
+function normalizeText(value) {
+  return typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
 }
